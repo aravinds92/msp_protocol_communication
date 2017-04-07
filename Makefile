@@ -4,5 +4,6 @@ all: clean
 	gcc src/serial.c -o src/serial.o -c
 	gcc -o obj src/main.o src/msp.o src/serial.o
 	rm src/*.o
+	./obj
 clean:
 	rm -rf obj

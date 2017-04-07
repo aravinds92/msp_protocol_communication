@@ -9,6 +9,18 @@
 #include "msp_protocol.h"
 #include "lib.h"
 
+#define BUILD_DATE_LENGTH 11
+#define BUILD_TIME_LENGTH 8
+#define GIT_SHORT_REVISION_LENGTH   7
+#define MAX_VOLTAGE_METERS 2
+#define TARGET_BOARD_IDENTIFIER "EDISON"
+#define BOARD_IDENTIFIER_LENGTH 6
+
+
+const char * const buildDate = __DATE__;
+const char * const buildTime = __TIME__;
+const char * const shortGitRevision = "1234567";
+static const char * const boardIdentifier = TARGET_BOARD_IDENTIFIER;
 
 static uint8_t mspSerialChecksum(uint8_t checksum, uint8_t byte)
 {
@@ -43,6 +55,12 @@ int sbufBytesRemaining(sbuf_t *buf)
     return buf->end - buf->ptr;
 }
 
+void sbufWriteString(sbuf_t *dst, const char *string)
+{
+    sbufWriteData(dst, string, strlen(string));
+}
+
+
 
 int mspServerCommandHandler(mspPacket_t *cmd, mspPacket_t *reply)
 {
@@ -52,6 +70,7 @@ int mspServerCommandHandler(mspPacket_t *cmd, mspPacket_t *reply)
     float attitude_roll, attitude_pitch, attitude_yaw;
 
     static int n = 0;
+    int i;
 
     int len = sbufBytesRemaining(src);
     //printf("%d\n",MSP_BOXNAMES);        
@@ -71,6 +90,127 @@ int mspServerCommandHandler(mspPacket_t *cmd, mspPacket_t *reply)
             sbufWriteU8(dst, FC_VERSION_MINOR);
             sbufWriteU8(dst, FC_VERSION_PATCH_LEVEL);
             break;
+
+        case MSP_BOARD_INFO:
+            sbufWriteData(dst, boardIdentifier, BOARD_IDENTIFIER_LENGTH);
+
+
+#ifdef USE_HARDWARE_REVISION_DETECTION
+            sbufWriteU16(dst, hardwareRevision);
+#else
+            sbufWriteU16(dst, 0); // No hardware revision available.
+#endif
+            sbufWriteU8(dst, 0);  // 0 == FC, 1 == OSD, 2 == FC with OSD
+            break;
+
+        case MSP_BUILD_INFO:
+            printf("date\n");
+            sbufWriteData(dst, buildDate, BUILD_DATE_LENGTH);
+            sbufWriteData(dst, buildTime, BUILD_TIME_LENGTH);
+            sbufWriteData(dst, shortGitRevision, GIT_SHORT_REVISION_LENGTH);
+            break;
+
+            // DEPRECATED - Use MSP_API_VERSION
+        case MSP_IDENT:
+            sbufWriteU8(dst, 255);
+            sbufWriteU8(dst, 255);
+            sbufWriteU8(dst, 255);
+            sbufWriteU32(dst, 65535); // "capability"
+            break;
+
+        case MSP_STATUS:
+            //printf("MSP_STATUS\n");
+            sbufWriteU16(dst, 0);
+#ifdef USE_I2C
+            sbufWriteU16(dst, i2cGetErrorCounter());
+#else
+            sbufWriteU16(dst, 0);
+#endif
+            sbufWriteU16(dst, 3);           //Sensors in the system
+            sbufWriteU32(dst, 127);
+            sbufWriteU8(dst, 127);
+            sbufWriteU16(dst, 30000);
+            break;
+
+        case MSP_UID:
+            sbufWriteU32(dst, 0);
+            sbufWriteU32(dst, 0);
+            sbufWriteU32(dst, 0);
+            break;
+
+        case MSP_BATTERY_CONFIG:
+            //Showing battery to be full for now
+            sbufWriteU8(dst, 255);
+            sbufWriteU8(dst, 255);
+            sbufWriteU8(dst, 255);
+            sbufWriteU16(dst, 65535);
+            sbufWriteU8(dst, 255);
+            break;
+
+        case MSP_ACC_TRIM:
+            //printf("MSP_ACC_TRIM\n");
+            sbufWriteU16(dst, 1000);            //pitch
+            sbufWriteU16(dst, 1000);            //roll
+            break;
+        
+        case MSP_BOXNAMES:
+            sbufWriteString(dst, "None");
+            //serializeBoxNamesReply(reply);
+            break;
+
+        case MSP_VOLTAGE_METERS:
+            // write out voltage, once for each meter.
+            /*for (int i = 0; i < MAX_VOLTAGE_METERS; i++) {
+                uint16_t voltage = getVoltageMeter(i)->vbat;
+                sbufWriteU8(dst, (uint8_t)constrain(voltage, 0, 255));
+            }*/
+            for (i = 0; i < MAX_VOLTAGE_METERS; i++) {
+                sbufWriteU8(dst, 255);
+            }
+            break;
+
+
+        case MSP_MISC:
+            sbufWriteU16(dst, 65535);
+
+            sbufWriteU16(dst, 65535);
+            sbufWriteU16(dst, 65535);
+            sbufWriteU16(dst, 65535);
+
+            sbufWriteU16(dst, 65535);
+
+            sbufWriteU8(dst, 0); // gps_type
+            sbufWriteU8(dst, 0); // TODO gps_baudrate (an index, cleanflight uses a uint32_t
+            sbufWriteU8(dst, 0); // gps_ubx_sbas
+
+            
+            sbufWriteU8(dst, 255);
+            sbufWriteU8(dst, 255);
+            sbufWriteU8(dst, 0);
+
+            sbufWriteU16(dst, 65535);
+            
+            break;
+
+        
+        case MSP_ATTITUDE:
+            
+            sbufWriteU16(dst, 120);     //roll
+            sbufWriteU16(dst, 120);     //pitch
+            sbufWriteU16(dst, 340);     //yaw
+            break;
+
+
+        case MSP_ANALOG: {
+            sbufWriteU8(dst, 0);
+            sbufWriteU16(dst, 65535); // milliamp hours drawn from battery
+            sbufWriteU16(dst, 65535);
+
+            sbufWriteU16(dst, 65535); // send amperage in 0.001 A steps. Negative range is truncated to zero
+            
+            break;
+        }
+
     }
 
     return 1;     // message was handled successfully

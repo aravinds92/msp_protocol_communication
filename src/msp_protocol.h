@@ -74,7 +74,6 @@
 #define FLIGHT_CONTROLLER_VERSION_LENGTH    3
 #define FLIGHT_CONTROLLER_VERSION_MASK      0xFFF
 
-#define BOARD_IDENTIFIER_LENGTH             4 // 4 UPPER CASE alpha numeric characters that identify the board being used.
 #define BOARD_HARDWARE_REVISION_LENGTH      2
 
 // These are baseflight specific flags but they are useless now since MW 2.3 uses the upper 4 bits for the navigation version.
